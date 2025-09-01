@@ -1,0 +1,13 @@
+#!/bin/bash
+# Dry-run toggle script
+
+if [ "$1" = "on" ]; then
+    echo '{"dry_run": true, "verbosity": "low", "debug_mode": false, "log_level": "INFO"}' > config/mode.json
+    echo "Dry-run mode activated"
+elif [ "$1" = "off" ]; then
+    echo '{"dry_run": false, "verbosity": "low", "debug_mode": false, "log_level": "INFO"}' > config/mode.json
+    echo "Dry-run mode deactivated"
+else
+    echo "Usage: $0 [on|off]"
+    exit 1
+fi

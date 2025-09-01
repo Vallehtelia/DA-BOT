@@ -1,0 +1,6 @@
+#!/bin/bash
+# Stop script - creates killswitch control file
+
+echo "Creating killswitch..."
+touch control/killswitch.on
+echo "Killswitch activated. System will stop at next step."

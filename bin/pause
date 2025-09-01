@@ -1,0 +1,6 @@
+#!/bin/bash
+# Pause script - creates pause control file
+
+echo "Creating pause..."
+touch control/pause.on
+echo "System paused. Resume by removing control/pause.on"

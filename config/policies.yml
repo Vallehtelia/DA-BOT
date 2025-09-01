@@ -1,0 +1,20 @@
+policies:
+  max_run_seconds: 1200
+  max_steps: 200
+  max_screenshots: 300
+  net_allowlist: ["duckduckgo.com", "docs.python.org"]
+  fs_allow_read: ["/workspace", "/tmp"]
+  fs_allow_write: ["/workspace/out", "/tmp"]
+  ui_allow_apps: ["Firefox", "Terminal"]
+  approval_required: ["send_email", "purchase", "commit_code"]
+
+retries:
+  llm_parse: {max: 1}
+  http: {max: 2, backoff_ms: 500}
+
+thresholds:
+  perception_confidence: 0.6
+
+loops:
+  replan_on_repeat: 3
+  abort_on_repeat: 6

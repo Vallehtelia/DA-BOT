@@ -1,0 +1,224 @@
+Perfect—here’s your roadmap **augmented with failsafes** and exactly **which phase** to build each piece. I kept your structure and slotted the controls, guardrails, and UI where they belong.
+
+---
+
+# Phase 0 — Ground rules & success criteria (½ day)
+
+**Add now**
+
+* **Policy file**: `config/policies.yml` (budgets, allowlists, tool scopes, timeouts).
+* **Control flags (spec decided now)**:
+
+  * `control/killswitch.on` (instant stop)
+  * `control/pause.on` (graceful pause)
+  * `config/mode.json` (e.g., `{ "dry_run": true, "verbosity": "low" }`)
+* **Stop conditions (explicit)**: success criteria met, budget exceeded, critic blocks twice, or killswitch present.
+
+---
+
+# Phase 1 — Skeleton platform (2–3 days)
+
+**Keep as-is + add failsafe plumbing**
+
+* **Signals**: trap `SIGINT/SIGTERM` → same abort routine as killswitch.
+* **Hard budgets enforced in core loop**: `max_run_seconds`, `max_steps`, `max_screenshots`, `max_requests`.
+* **Scope gate in Router**: refuse agent actions outside `fs/net/ui` allowlists.
+* **Heartbeat + watchdog**:
+
+  * Main loop updates `runtime/heartbeat.ts` every 2–3 seconds.
+  * Tiny **watchdog process** can create `control/killswitch.on` if heartbeat stale >10s.
+* **Atomic checkpointing**:
+
+  * After every step, write `runtime/run_state.json` (+ step log) and store artifact hashes.
+* **Audit log (append-only)**:
+
+  * `(ts, tool, inputs_signature, outputs_signature, artifacts[], policy_events[])`.
+
+**Acceptance (add)**
+
+* Toggling `control/killswitch.on` aborts within 1 step.
+* Router blocks a test action outside scopes and logs policy violation.
+
+---
+
+# Phase 2 — Perception + Operator you can trust (2–4 days)
+
+**Add soft brakes + confidence gates**
+
+* **Perception confidence threshold** (τ, e.g., 0.6). Below τ → Overseer must request zoom/hover or re-scan before acting.
+* **Loop detector seed**: store `(tool, inputs_signature)`; 3 repeats → replan; 6 repeats → abort.
+* **Pixel-diff guard** after click: if no delta → count toward loop.
+
+**Acceptance (add)**
+
+* Induce low-confidence OCR: system requests zoom crop before continuing.
+* Repeat same click 3×: forces replan; 6×: clean abort with state saved.
+
+---
+
+# Phase 3 — Memory that keeps you inside token limits (2–3 days)
+
+**Add safety to memory**
+
+* **Redaction filter** on summaries/logs (no secrets, cookies, keys).
+* **Rate caps for memory writes** to avoid runaway disk usage.
+* **Crash-safe rollover**: rotate logs/artifacts after N MB or M steps.
+
+**Acceptance (add)**
+
+* Inject a fake secret in tool output → redacted in memory and logs.
+
+---
+
+# Phase 4 — Planning loop with guardrails (3–4 days)
+
+**Enable critic + circuit breakers**
+
+* **Critic agent** enforces: loop detection signals, risky scopes, missing prerequisites.
+* **Circuit breaker** per tool/domain: 3 consecutive failures → open circuit 5 min; Overseer reroutes or stops.
+* **Rollback hooks** (when available): e.g., browser “back”, delete temp files.
+
+**Acceptance (add)**
+
+* Force 3 HTTP failures to the same domain → breaker opens, run continues via alternate step or aborts cleanly with rationale.
+
+---
+
+# Phase 5 — First end-to-end workflow (2–4 days)
+
+**Dry-run mode + approvals**
+
+* **Dry-run** honored end-to-end: no irreversible actions (only drafts/artifacts).
+* **Approval gates** (file-based): actions in `policies.approval_required` require `control/approve/<action>.on` to proceed.
+
+**Acceptance (add)**
+
+* Attempt an “approval-required” step without flag → blocked, logged; placing file → proceeds.
+
+---
+
+# Phase 6 — Browser micro-agent & reliability upgrades (2–3 days)
+
+**Containment for web**
+
+* **Network allowlist** enforced in browser agent; DNS/HTTP request log `(domain, bytes, status)`.
+* **Popup/consent handlers** as first-class steps; Perception must tag banners; Overseer inserts dismiss action.
+
+**Acceptance (add)**
+
+* Unknown domain → blocked by allowlist and logged.
+* Cookie banner appears randomly → auto-dismissed or plan adapts.
+
+---
+
+# Phase 7 — Autonomy hardening (2–3 days)
+
+**Self-healing & observability**
+
+* **StuckCard**: on repeated replans, persist a compact card with last N screenshots, plan deltas, and reason.
+* **Timeline viewer (read-only UI v0)**:
+
+  * Single HTML page (or TUI) listing steps, screenshots, JSON I/O, budgets consumed.
+  * Buttons mapped to **files** under `control/` (Run/Pause/Stop toggles write/delete files).
+
+**Acceptance (add)**
+
+* Operator stuck scenario → StuckCard created; timeline shows blocks and circuit events.
+
+---
+
+# Phase 8 — Safety & containment (1–2 days)
+
+**Isolation + secrets hygiene**
+
+* **Least-privilege OS user**; tool subprocesses run in that user; write-only `/workspace/out`, read-only `/workspace`.
+* **Optional container sandbox** for Tool agents.
+* **Secrets vaulting**: secrets **only** available to Tool env; prompts never include them.
+* **Quarantine**: downloaded files moved to `artifacts/quarantine/` with hash + provenance.
+
+**Acceptance (add)**
+
+* Tool attempts to write outside allowed path → denied & logged.
+* Prompt inspection confirms no secret literals appear.
+
+---
+
+# Phase 9 — “Runs itself” certification (1–2 days)
+
+**Safety regression suite**
+
+* **Guardrail tests**: out-of-scope FS, out-of-allowlist net, loop, low-confidence perception, approval-required action.
+* Must both **perform the tasks** and **refuse unsafe ones**—no human input.
+
+**Pass (unchanged + add)**
+
+* ≥85% task success, **0 guardrail breaches**, max budgets respected, killswitch honored mid-run.
+
+---
+
+# Phase 10 — Evolution hooks (ongoing)
+
+**Plugin lifecycle + shadowing**
+
+* **Agent manifests** must declare scopes and failure classes.
+* **Golden tests** per agent before registration.
+* **Shadow mode** for 10 runs: agent produces outputs but Router doesn’t act on them; compare vs primary.
+* **Upgrade policy**: keep `agent@old` for rollback until `agent@new` clears 95% success over 20 shadow runs.
+
+---
+
+## Control Surface Plan (phased)
+
+**Phase 1–2 (now): file/CLI controls**
+
+* `control/killswitch.on`, `control/pause.on`, `config/mode.json`.
+* CLI helpers: `bin/pause`, `bin/stop`, `bin/dryrun on|off` (they only write/delete control files).
+
+**Phase 7 (timeline UI v0)**
+
+* Read-only dashboard (local static app) + buttons that write/delete control files.
+* Visualize: steps, screenshots, budgets, circuit breakers, policy blocks, StuckCards.
+
+**Optional Phase 11 (later, if needed)**
+
+* Editable `.env` with schema validation + masked secrets.
+* Editor for policies.yml with linting and a “dry-run diff” preview.
+
+---
+
+## Policies & Config (drop-in now; evolve later)
+
+**`config/policies.yml` (minimal starter)**
+
+```
+policies:
+  max_run_seconds: 1200
+  max_steps: 200
+  max_screenshots: 300
+  net_allowlist: ["duckduckgo.com", "docs.python.org"]
+  fs_allow_read: ["/workspace", "/tmp"]
+  fs_allow_write: ["/workspace/out", "/tmp"]
+  ui_allow_apps: ["Firefox", "Terminal"]
+  approval_required: ["send_email", "purchase", "commit_code"]
+retries:
+  llm_parse: {max: 1}
+  http: {max: 2, backoff_ms: 500}
+thresholds:
+  perception_confidence: 0.6
+loops:
+  replan_on_repeat: 3
+  abort_on_repeat: 6
+```
+
+---
+
+## Run Lifecycle with Failsafes (unchanged logic, explicit checks)
+
+1. Load config → validate → start heartbeat.
+2. **Pre-step checks**: killswitch, pause, budgets, circuit breakers.
+3. Execute tool with **timeout + scope checks**.
+4. Perception → Critic → commit/rollback.
+5. Persist checkpoint + micro-summary; update heartbeat.
+6. On stop: finalize report, seal logs, exit.
+
+This keeps your original roadmap intact, while making the **kill switch, guardrails, soft brakes, isolation, and UI** first-class deliverables at the right phases.

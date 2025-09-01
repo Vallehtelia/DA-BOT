@@ -1,0 +1,6 @@
+{
+  "dry_run": true,
+  "verbosity": "high",
+  "debug_mode": true,
+  "log_level": "INFO"
+}
