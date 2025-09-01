@@ -74,6 +74,15 @@ DA-BOT is a sophisticated AI agent platform designed for autonomous task executi
 
 ## Quick Start
 
+> **⚠️ Hardware Requirements Warning**
+> 
+> This platform uses the GPT-OSS-20B model locally and requires **at least 16GB VRAM GPU** for proper operation. The model uses MXFP4 quantization to fit within 16GB memory. Without sufficient VRAM, the system will fail to load the model or run extremely slowly.
+> 
+> **Recommended Hardware:**
+> - **GPU**: NVIDIA RTX 4090 (24GB), RTX 3090 (24GB), or similar high-VRAM GPU
+> - **RAM**: 32GB+ system RAM recommended
+> - **Storage**: 50GB+ free space for model weights and runtime data
+
 ### 1. Test GPT-OSS-20B Model
 ```bash
 # Create and activate virtual environment
