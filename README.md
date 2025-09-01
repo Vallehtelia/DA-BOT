@@ -1,6 +1,6 @@
 # DA-BOT: AI Agent Platform
 
-A sophisticated AI agent platform with multiple phases of development, featuring safety controls, guardrails, and autonomous operation capabilities.
+A sophisticated AI agent platform with multiple phases of development, featuring safety controls, guardrails, and autonomous operation capabilities. The ultimate goal is to create a system that can operate a computer completely unattended, develop itself by writing and testing new functionalities and agents, and continuously improve its own code through self-modification and learning.
 
 ## Project Overview
 
@@ -11,6 +11,8 @@ DA-BOT is a sophisticated AI agent platform designed for autonomous task executi
 - **Modular Design**: Clean separation of concerns with pluggable agents
 - **Phased Development**: Incremental complexity with validation at each step
 - **Real-World Ready**: Built for actual task automation, not just demos
+- **Self-Improving**: Designed to evolve, learn, and enhance its own capabilities
+- **Autonomous Operation**: Ultimate goal of complete unattended computer operation
 
 ### **🧠 AI-Powered Intelligence**
 - **GPT-OSS-20B Integration**: OpenAI's open-weight model for reasoning and planning
@@ -32,6 +34,14 @@ DA-BOT is a sophisticated AI agent platform designed for autonomous task executi
 - **Model Management**: Singleton pattern prevents multiple model loading
 - **Atomic Checkpointing**: Crash-safe state persistence and recovery
 - **Safe Logging**: Automatic redaction of sensitive information
+
+### **🚀 Long-Term Vision**
+- **Complete Autonomy**: Operate computers without human intervention
+- **Self-Development**: Write, test, and deploy new agents and functionalities
+- **Code Evolution**: Improve its own codebase through analysis and modification
+- **Learning System**: Continuously learn from successes and failures
+- **Adaptive Intelligence**: Evolve capabilities based on encountered challenges
+- **Self-Monitoring**: Maintain and upgrade its own systems and safety mechanisms
 
 ## Current Status
 
@@ -360,4 +370,4 @@ This project uses the following third-party components:
 - ⚠️ **Liability**: No warranty provided
 - ⚠️ **Patent use**: Subject to Apache 2.0 terms
 
-For the full license text, see the [LICENSE](LICENSE) file in the project root.
+For the full license text, see the [LICENSE].
