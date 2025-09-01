@@ -4,14 +4,56 @@ A sophisticated AI agent platform with multiple phases of development, featuring
 
 ## Project Overview
 
-This platform is designed to be built in phases, starting with a solid foundation and progressively adding more advanced features. See `overview/project_overview.txt` for the complete roadmap.
+DA-BOT is a sophisticated AI agent platform designed for autonomous task execution with comprehensive safety controls and guardrails. The platform uses GPT-OSS-20B for intelligent planning and decision-making, while maintaining strict safety boundaries through multiple layers of protection.
+
+### **🎯 Core Philosophy**
+- **Safety First**: Every component includes failsafes, budget limits, and kill switches
+- **Modular Design**: Clean separation of concerns with pluggable agents
+- **Phased Development**: Incremental complexity with validation at each step
+- **Real-World Ready**: Built for actual task automation, not just demos
+
+### **🧠 AI-Powered Intelligence**
+- **GPT-OSS-20B Integration**: OpenAI's open-weight model for reasoning and planning
+- **Harmony Response Format**: Structured JSON responses for reliable parsing
+- **Configurable Reasoning**: Low/Medium/High reasoning levels for different tasks
+- **Context-Aware**: Rich context injection for better decision making
+
+### **🛡️ Multi-Layer Safety System**
+- **Killswitch**: Instant stop via file-based controls
+- **Budget Limits**: Time, steps, screenshots, and request constraints
+- **Scope Gates**: Restricted file system and network access
+- **Loop Detection**: Prevents infinite loops and stuck states
+- **Circuit Breakers**: Automatic failure handling and recovery
+- **Dev Mode**: Override safety for development and testing
+
+### **🏗️ Architecture Highlights**
+- **Memory System**: Persistent storage of goals, plans, and important information
+- **Agent Coordination**: Overseer orchestrates perception → planning → operation workflow
+- **Model Management**: Singleton pattern prevents multiple model loading
+- **Atomic Checkpointing**: Crash-safe state persistence and recovery
+- **Safe Logging**: Automatic redaction of sensitive information
 
 ## Current Status
 
 - ✅ **Phase 0**: Ground rules & success criteria
-- 🚧 **Phase 1**: Skeleton platform (in progress)
-- ⏳ **Phase 2**: Perception + Operator
-- ⏳ **Phase 3**: Memory management
+- ✅ **Phase 1**: Skeleton platform (COMPLETED)
+  - ✅ Core memory system with goals, plans, and checkpoints
+  - ✅ Comprehensive failsafe system (killswitch, pause, budget limits)
+  - ✅ Base agent architecture with GPT-OSS-20B integration
+  - ✅ Overseer coordination system
+  - ✅ Perception, Operator, and Router agents (simulated)
+  - ✅ Configuration management and control scripts
+  - ✅ JSON validation and error handling
+  - ✅ Model manager with singleton pattern
+  - ✅ Safe logging with sensitive data redaction
+- 🚧 **Phase 2**: Perception + Operator (in progress)
+  - ✅ Agent implementations with LLM integration
+  - ⏳ Real screenshot capture and UI analysis
+  - ⏳ Actual mouse/keyboard input simulation
+- ⏳ **Phase 3**: Memory management (partially complete)
+  - ✅ Basic memory system implemented
+  - ✅ Important memory with persistence
+  - ⏳ Advanced memory optimization and token limits
 - ⏳ **Phase 4**: Planning loop with guardrails
 - ⏳ **Phase 5**: First end-to-end workflow
 - ⏳ **Phase 6**: Browser micro-agent
@@ -124,6 +166,24 @@ DA-BOT/
 └── README.md             # This file
 ```
 
+## Current Capabilities
+
+### ✅ **What's Working Now**
+- **AI-Powered Planning**: GPT-OSS-20B generates intelligent, goal-specific plans
+- **Memory System**: Persistent storage of goals, plans, and important information
+- **Safety Controls**: Killswitch, pause, budget limits, and failsafe systems
+- **Agent Coordination**: Overseer orchestrates perception → planning → operation workflow
+- **JSON Validation**: Robust parsing and validation of LLM responses
+- **Model Management**: Singleton pattern prevents multiple model loading
+- **Debug Mode**: Comprehensive logging with sensitive data redaction
+- **Retry Logic**: Configurable retry attempts for goal execution
+- **Checkpointing**: Atomic state saves and recovery
+
+### 🚧 **Currently Simulated**
+- **Screenshot Analysis**: Perception agent simulates UI element detection
+- **Input Actions**: Operator agent simulates mouse/keyboard operations
+- **Real UI Interaction**: Actual screenshot capture and input simulation pending
+
 ## Architecture
 
 The platform is built with a modular architecture:
@@ -154,10 +214,150 @@ The `agents/` package provides a clean interface that imports from the `tools/` 
 - **Circuit breakers**: Automatic failure handling
 - **Dev mode**: `DISABLE_KILLSWITCH=1` for development
 
+## Recent Improvements
+
+### **🔧 Latest Fixes & Enhancements**
+- **JSON Validation**: Fixed type errors and improved dict/string handling
+- **Plan Generation**: AI now creates goal-specific plans instead of generic fallbacks
+- **Memory System**: Enhanced with important memory persistence and context injection
+- **Debug Logging**: Safe redaction of sensitive information (passwords, keys, emails)
+- **Agent Context**: Rich context injection for better decision making
+- **Error Handling**: Robust retry logic and graceful failure recovery
+- **Project Structure**: Reorganized into logical `tools/` subfolders
+- **Import Paths**: Updated all imports for new structure
+- **Git Ignore**: Added runtime files to prevent accidental commits
+
+### **🎯 Key Features Working**
+- **Intelligent Planning**: GPT-OSS-20B generates structured, actionable plans
+- **Memory Persistence**: Important information saved across sessions
+- **Safety First**: Comprehensive failsafe system from day one
+- **Modular Design**: Clean separation of concerns and easy extensibility
+- **Developer Friendly**: Debug mode, dev killswitch override, comprehensive logging
+
+## Technical Architecture
+
+### **🏗️ Design Principles**
+- **Modular Architecture**: Each component has a single responsibility
+- **Safety by Design**: Failsafes integrated at every level
+- **Extensibility**: Easy to add new agents and capabilities
+- **Observability**: Comprehensive logging and monitoring
+- **Testability**: Unit tests, integration tests, and end-to-end validation
+
+### **🔄 Execution Flow**
+1. **Goal Setting**: User provides high-level objective
+2. **Planning**: Overseer creates detailed step-by-step plan
+3. **Execution**: Perception → Planning → Operation → Validation loop
+4. **Memory**: Important information persisted across sessions
+5. **Safety**: Continuous monitoring and failsafe activation
+
+### **🧩 Component Interaction**
+```
+User Goal → Overseer → Plan Creation → Step Execution
+    ↓           ↓           ↓              ↓
+Memory ← Context ← Agents ← Validation ← Safety
+    ↓           ↓           ↓              ↓
+Persistence ← Logging ← Monitoring ← Failsafes
+```
+
 ## Development
 
 This project follows a phased development approach with each phase building upon the previous one. Each phase includes specific safety controls and acceptance criteria.
 
+## Development Roadmap
+
+### **Phase 0: Ground Rules & Success Criteria** ✅
+- **Policy Framework**: Budget limits, allowlists, and safety thresholds
+- **Control System**: Killswitch, pause, and dry-run modes
+- **Stop Conditions**: Success criteria, budget exceeded, or killswitch activated
+
+### **Phase 1: Skeleton Platform** ✅ **COMPLETED**
+- **Core Systems**: Memory, failsafes, base agents, and overseer
+- **Safety Integration**: Signal handlers, budget enforcement, and heartbeat monitoring
+- **Agent Architecture**: GPT-OSS-20B integration with JSON validation
+- **Configuration**: Policies, modes, and agent prompts
+- **Control Scripts**: Emergency stop, pause, and dry-run toggles
+
+### **Phase 2: Perception + Operator** 🚧 **IN PROGRESS**
+- **Real UI Interaction**: Actual screenshot capture and input simulation
+- **Confidence Gates**: Perception threshold validation and re-scan requests
+- **Loop Detection**: Tool signature tracking and automatic replanning
+- **Pixel-Diff Guards**: Change detection after actions
+
+### **Phase 3: Memory Management** ⏳ **PARTIALLY COMPLETE**
+- **Token-Aware Memory**: Intelligent memory optimization and compression
+- **Redaction Filters**: Automatic removal of secrets and sensitive data
+- **Crash-Safe Rollover**: Memory rotation and cleanup
+- **Rate Limiting**: Prevent runaway disk usage
+
+### **Phase 4: Planning Loop with Guardrails** ⏳
+- **Critic Agent**: Loop detection, scope validation, and prerequisite checking
+- **Circuit Breakers**: Per-tool failure tracking and automatic recovery
+- **Rollback Hooks**: Browser back, file cleanup, and state restoration
+- **Advanced Planning**: Multi-step validation and risk assessment
+
+### **Phase 5: First End-to-End Workflow** ⏳
+- **Dry-Run Mode**: Complete workflow testing without real actions
+- **Approval Gates**: File-based approval system for sensitive operations
+- **Workflow Validation**: End-to-end task completion testing
+- **Error Recovery**: Graceful handling of workflow failures
+
+### **Phase 6: Browser Micro-Agent** ⏳
+- **Web Browsing**: Full browser automation with safety controls
+- **Network Allowlists**: Domain-based access control
+- **Popup Handling**: Automatic consent and banner management
+- **Content Analysis**: Web page understanding and interaction
+
+### **Phase 7: Autonomy Hardening** ⏳
+- **Self-Healing**: Automatic recovery from stuck states
+- **Timeline Viewer**: Visual debugging and monitoring interface
+- **StuckCard System**: Compact state snapshots for analysis
+- **Observability**: Comprehensive logging and monitoring
+
+### **Phase 8: Safety & Containment** ⏳
+- **Isolation**: Least-privilege execution and sandboxing
+- **Secrets Management**: Secure credential handling and vaulting
+- **Quarantine System**: Safe file handling and provenance tracking
+- **Container Support**: Optional Docker-based isolation
+
+### **Phase 9: "Runs Itself" Certification** ⏳
+- **Safety Regression Suite**: Comprehensive guardrail testing
+- **Autonomous Operation**: Unattended task execution validation
+- **Performance Benchmarks**: Success rate and efficiency metrics
+- **Certification Process**: Formal validation of autonomous capabilities
+
+### **Phase 10: Evolution Hooks** ⏳
+- **Plugin System**: Dynamic agent registration and management
+- **Shadow Mode**: Safe testing of new agents alongside existing ones
+- **Upgrade Policy**: Gradual rollout with rollback capabilities
+- **Golden Tests**: Validation suite for new agent registration
+
+### **Next Immediate Steps**
+1. **Real UI Interaction**: Replace simulated actions with actual screenshot capture and input simulation
+2. **Browser Integration**: Add web browsing capabilities with safety controls
+3. **Advanced Memory**: Implement token-aware memory management and optimization
+4. **Circuit Breakers**: Add failure detection and automatic recovery mechanisms
+5. **End-to-End Workflows**: Complete real-world task automation testing
+
 ## License
 
-[Add your license here]
+This project is licensed under the Apache License 2.0 - see the [LICENSE](LICENSE) file for details.
+
+### Third-Party Licenses
+
+This project uses the following third-party components:
+
+- **GPT-OSS-20B Model**: Licensed under Apache 2.0 by OpenAI
+- **Hugging Face Transformers**: Licensed under Apache 2.0
+- **PyTorch**: Licensed under BSD-3-Clause
+- **Other dependencies**: See `requirements.txt` for individual package licenses
+
+### Usage Rights
+
+- ✅ **Commercial use**: Allowed
+- ✅ **Modification**: Allowed  
+- ✅ **Distribution**: Allowed
+- ✅ **Private use**: Allowed
+- ⚠️ **Liability**: No warranty provided
+- ⚠️ **Patent use**: Subject to Apache 2.0 terms
+
+For the full license text, see the [LICENSE](LICENSE) file in the project root.
