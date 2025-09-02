@@ -219,3 +219,6 @@ Thumbs.db
 .env.production
 config/secrets.yml
 config/*.key
+
+# Cursor files
+.cursor/

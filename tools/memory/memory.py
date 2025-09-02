@@ -290,6 +290,11 @@ class Memory:
         if not memory_data:
             return False
         
+        # Allow-list gate: only process if memory_data is a dict
+        if not isinstance(memory_data, dict):
+            self.logger.info("Ignoring memory payload (not an object)")
+            return False
+        
         try:
             # Extract memory fields
             important_info = memory_data.get("important_info", [])

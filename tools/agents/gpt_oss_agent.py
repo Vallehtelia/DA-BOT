@@ -184,11 +184,14 @@ Assistant:"""
             
             # Debug mode: print sanitized prompts and raw responses
             if self._is_debug_mode():
-                from tools.utils.redact import safe_redact
+                try:
+                    from tools.utils.redact import safe_redact
+                except Exception:
+                    def safe_redact(x): 
+                        return str(x) if x is not None else ""
                 self.logger.info("=== DEBUG MODE ===")
-                # Sanitize prompt for logging
-                sanitized_prompt = safe_redact(prompt)
-                self.logger.info(f"Sanitized prompt (length: {len(sanitized_prompt)}): {sanitized_prompt[:200]}...")
+                sp = safe_redact(prompt)
+                self.logger.info(f"Sanitized prompt (length: {len(sp)}): {sp[:200]}...")
                 self.logger.info(f"Raw LLM response: {safe_redact(llm_response)}")
                 self.logger.info(f"Extracted JSON: {safe_redact(json_response)}")
                 self.logger.info(f"Validated response: {safe_redact(validated_response)}")
@@ -277,23 +280,55 @@ Assistant:"""
         
         return prompt
     
+    def _extract_first_json_block(self, text: str) -> Optional[str]:
+        """Extract the first balanced JSON block from text."""
+        if not isinstance(text, str):
+            return None
+        start = text.find('{')
+        if start == -1:
+            return None
+        depth = 0
+        for i in range(start, len(text)):
+            c = text[i]
+            if c == '{':
+                depth += 1
+            elif c == '}':
+                depth -= 1
+                if depth == 0:
+                    return text[start:i+1]
+        return None
+
     def _attempt_json_fix(self, response: str) -> Optional[Dict[str, Any]]:
-        """Attempt to fix common JSON issues."""
+        """Attempt to fix common JSON formatting issues using balanced-brace extraction."""
         try:
-            # Try to find JSON content
+            # First try balanced-brace extraction
+            block = self._extract_first_json_block(response)
+            if block:
+                import json
+                return json.loads(block)
+            
+            # Fallback: fenced code blocks
             if "```json" in response:
                 start = response.find("```json") + 7
                 end = response.find("```", start)
                 if end != -1:
-                    json_content = response[start:end].strip()
-                    return json.loads(json_content)
+                    return json.loads(response[start:end].strip())
             
-            # Try to find any JSON-like content
-            if "{" in response and "}" in response:
-                start = response.find("{")
-                end = response.rfind("}") + 1
-                json_content = response[start:end]
-                return json.loads(json_content)
+            # Fallback: code blocks without language
+            if "```" in response:
+                start = response.find("```") + 3
+                end = response.find("```", start)
+                if end != -1:
+                    json_str = response[start:end].strip()
+                    if json_str.startswith("{") and json_str.endswith("}"):
+                        return json.loads(json_str)
+            
+            # Fallback: after assistantfinal token
+            if "assistantfinal" in response:
+                start = response.find("assistantfinal") + len("assistantfinal")
+                json_str = response[start:].strip()
+                if json_str.startswith("{") and json_str.endswith("}"):
+                    return json.loads(json_str)
             
             return None
             

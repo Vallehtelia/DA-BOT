@@ -3,11 +3,29 @@ Overseer Agent implementation for the AI agent platform.
 Handles planning, coordination, and high-level decision making.
 """
 
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Optional
 from tools.agents.gpt_oss_agent import GPTOSS20BAgent
 
 class OverseerAgent(GPTOSS20BAgent):
     """Overseer agent for planning and coordination."""
+    
+    CAPABILITIES = {
+        "perception": {
+            "actions": ["analyze", "identify"],
+            "notes": "Analyze screenshots; find icons/text; return coordinates."
+        },
+        "operator": {
+            "actions": ["move_mouse", "click", "type", "scroll", "navigate"],
+            "notes": "Perform UI interactions with coordinates/text."
+        },
+        "overseer": {
+            "actions": ["plan", "coordinate", "evaluate", "complete"],
+            "notes": "Plan/route/evaluate."
+        },
+        # future:
+        "critic": {"actions": ["evaluate"], "notes": "Assess step success"},
+        "router": {"actions": ["validate","block","allow","circuit_breaker"], "notes": "Safety checks"}
+    }
     
     def __init__(self, config_path: str = "config", reasoning_level: str = "high"):
         super().__init__("overseer", config_path, reasoning_level)
@@ -15,6 +33,174 @@ class OverseerAgent(GPTOSS20BAgent):
         # Overseer-specific capabilities
         self.planning_history = []
         self.coordination_state = {}
+    
+    def _canonicalize_overseer_response(self, data: dict) -> dict:
+        """Canonicalize overseer response to standard format."""
+        if not isinstance(data, dict): 
+            return {"role": self.agent_name, "success": False, "action": "plan", "plan": []}
+        
+        # Map synonyms
+        if not data.get("plan") and isinstance(data.get("steps"), list):
+            data["plan"] = data.pop("steps")
+        
+        for st in data.get("plan", []):
+            if "next_agent" not in st and "agent" in st:
+                st["next_agent"] = str(st.pop("agent")).lower()
+        
+        # Set defaults
+        data.setdefault("role", "overseer")
+        data.setdefault("action", "plan")
+        data.setdefault("success", False)
+        if not isinstance(data.get("plan"), list):
+            data["plan"] = []
+        
+        return data
+    
+    def _enforce_capabilities_and_preconditions(self, steps: list) -> list:
+        """Enforce agent capabilities and insert missing preconditions."""
+        out = []
+        
+        def needs_coords(s):
+            act = s.get("action", "")
+            return s.get("next_agent") == "operator" and act in {"move_mouse","click","scroll"}
+        
+        for s in steps:
+            # Normalize action based on agent
+            ag = s.get("next_agent", "perception")
+            act = s.get("action") or ("analyze" if ag=="perception" else ("navigate" if ag=="operator" else "plan"))
+            allowed = set(self.CAPABILITIES.get(ag, {}).get("actions", []))
+            
+            if act not in allowed:
+                # Coerce to a safe default
+                act = "analyze" if ag=="perception" else ("navigate" if ag=="operator" else "plan")
+            s["action"] = act
+            
+            # Insert precondition for coordinates
+            if needs_coords(s) and not s.get("coordinates"):
+                out.append({
+                    "id": None,
+                    "description": "Identify target UI element and return coordinates required by next operator action",
+                    "next_agent": "perception",
+                    "action": "identify",
+                    "success_criteria": "Coordinates provided",
+                    "priority": "high"
+                })
+            
+            out.append(s)
+        
+        # Renumber ids
+        for i, st in enumerate(out, 1):
+            st["id"] = i
+        
+        return out
+    
+    def _validate_plan_with_critic(self, goal: str, plan_steps: List[Any]) -> Optional[Dict[str, Any]]:
+        """Validate plan with CriticAgent if available."""
+        try:
+            # Check if we have access to a critic agent
+            # This would typically be injected by the Overseer
+            if hasattr(self, 'critic_agent') and self.critic_agent:
+                critic_input = {
+                    "action": "evaluate",
+                    "goal": goal,
+                    "plan": plan_steps
+                }
+                return self.critic_agent.process(critic_input)
+            else:
+                # Fallback validation
+                return self._fallback_plan_validation(plan_steps)
+        except Exception as e:
+            self.logger.error(f"Error validating plan with critic: {e}")
+            return None
+    
+    def _improve_plan_with_critic(self, goal: str, plan_steps: List[Any], critic_validation: Dict[str, Any]) -> Optional[List[Any]]:
+        """Improve plan based on critic feedback."""
+        try:
+            if hasattr(self, 'critic_agent') and self.critic_agent:
+                critic_input = {
+                    "action": "improve",
+                    "goal": goal,
+                    "plan": plan_steps,
+                    "issues": critic_validation.get("issues_found", [])
+                }
+                improvement_response = self.critic_agent.process(critic_input)
+                
+                if improvement_response and improvement_response.get("success"):
+                    # Apply improvements based on recommendations
+                    improved_steps = self._apply_improvements(plan_steps, improvement_response.get("recommendations", []))
+                    return improved_steps
+            
+            return None
+        except Exception as e:
+            self.logger.error(f"Error improving plan with critic: {e}")
+            return None
+    
+    def _fallback_plan_validation(self, plan_steps: List[Any]) -> Dict[str, Any]:
+        """Fallback plan validation when critic is not available."""
+        issues = []
+        recommendations = []
+        
+        # Basic validation
+        if not plan_steps:
+            issues.append("Plan is empty")
+            recommendations.append("Create a plan with at least one step")
+        else:
+            # Check for basic structure
+            for i, step in enumerate(plan_steps):
+                if isinstance(step, dict):
+                    if not step.get("description"):
+                        issues.append(f"Step {i+1} missing description")
+                    if not step.get("next_agent"):
+                        issues.append(f"Step {i+1} missing next_agent")
+                    if not step.get("action"):
+                        issues.append(f"Step {i+1} missing action")
+                else:
+                    issues.append(f"Step {i+1} is not a structured object")
+        
+        # Calculate quality score
+        plan_quality = max(0.0, 1.0 - (len(issues) * 0.2))
+        
+        return {
+            "role": "critic",
+            "action": "evaluate",
+            "reasoning_level": "high",
+            "plan_quality": plan_quality,
+            "issues_found": issues,
+            "recommendations": recommendations,
+            "overall_score": plan_quality,
+            "success": True
+        }
+    
+    def _apply_improvements(self, plan_steps: List[Any], recommendations: List[str]) -> List[Any]:
+        """Apply critic recommendations to improve the plan."""
+        improved_steps = []
+        
+        for i, step in enumerate(plan_steps):
+            if isinstance(step, dict):
+                improved_step = step.copy()
+                
+                # Apply common improvements
+                for rec in recommendations:
+                    if "description" in rec.lower() and not improved_step.get("description"):
+                        improved_step["description"] = f"Step {i+1}: {improved_step.get('action', 'unknown')}"
+                    elif "next_agent" in rec.lower() and not improved_step.get("next_agent"):
+                        improved_step["next_agent"] = "perception"  # Default
+                    elif "action" in rec.lower() and not improved_step.get("action"):
+                        improved_step["action"] = "analyze"  # Default
+                
+                improved_steps.append(improved_step)
+            else:
+                # Convert string steps to structured objects
+                improved_steps.append({
+                    "id": i + 1,
+                    "description": str(step),
+                    "next_agent": "perception",
+                    "action": "analyze",
+                    "success_criteria": "Step completed",
+                    "priority": "medium"
+                })
+        
+        return improved_steps
     
     def process(self, input_data: Dict[str, Any]) -> Dict[str, Any]:
         """Process overseer-specific tasks."""
@@ -32,43 +218,113 @@ class OverseerAgent(GPTOSS20BAgent):
             return super().process(input_data)
     
     def _create_plan(self, input_data: Dict[str, Any]) -> Dict[str, Any]:
-        """Create a detailed plan for achieving a goal."""
+        """Create a detailed plan for achieving a goal with approval loop."""
         try:
             goal = input_data.get("goal", "Unknown goal")
+            max_iterations = 3
+            approval_threshold = 0.8
+            iteration = 0
+            consecutive_failures = 0
             
-            # Create planning prompt
-            planning_prompt = {
-                "action": "plan",
-                "goal": goal,
-                "context": "Create a detailed plan to achieve this goal. Break it down into specific, actionable steps that can be executed by perception and operator agents."
-            }
+            self.logger.info(f"Starting plan creation with approval loop for goal: {goal}")
             
-            # Get LLM response with higher token limit for planning
-            response = self._call_llm_with_planning_tokens(planning_prompt)
-            
-            if response:
+            while iteration < max_iterations:
+                iteration += 1
+                self.logger.info(f"Plan creation iteration {iteration}/{max_iterations}")
+                
+                # Create planning prompt
+                planning_prompt = {
+                    "action": "plan",
+                    "goal": goal,
+                    "context": "Create a detailed plan to achieve this goal. Break it down into specific, actionable steps that can be executed by perception and operator agents."
+                }
+                
+                # Get LLM response with higher token limit for planning
+                response = self._call_llm_with_planning_tokens(planning_prompt)
+                
+                # Canonicalize response
+                response = self._canonicalize_overseer_response(response)
+                
                 plan_steps = response.get("plan", [])
-                if plan_steps:
-                    # Validate and clean plan steps
-                    cleaned_steps = self._clean_plan_steps(plan_steps)
+                if not plan_steps:
+                    self.logger.warning(f"Iteration {iteration}: Planner returned no steps")
+                    consecutive_failures += 1
+                    continue
+                
+                # Clean plan steps
+                plan_steps = self._clean_plan_steps(plan_steps)
+                
+                # Enforce capabilities and insert preconditions
+                plan_steps = self._enforce_capabilities_and_preconditions(plan_steps)
+                
+                # Update response with processed steps
+                response["plan"] = plan_steps
+                response["plan_quality"] = self._assess_plan_quality(plan_steps)
+                
+                # Validate plan with CriticAgent if available
+                critic_validation = self._validate_plan_with_critic(goal, plan_steps)
+                if critic_validation:
+                    response["critic_validation"] = critic_validation
+                    overall_score = critic_validation.get("overall_score", 0.0)
                     
-                    # Update response with cleaned steps
-                    response["plan"] = cleaned_steps
-                    response["plan_quality"] = self._assess_plan_quality(cleaned_steps)
+                    self.logger.info(f"Iteration {iteration}: Critic score {overall_score:.2f} (threshold: {approval_threshold})")
                     
-                    # Store planning history
-                    self.planning_history.append({
-                        "goal": goal,
-                        "plan": cleaned_steps,
-                        "timestamp": self._get_timestamp()
-                    })
+                    # Check if plan is approved
+                    if overall_score >= approval_threshold:
+                        self.logger.info(f"Plan approved by critic with score {overall_score:.2f}")
+                        response["plan_approved"] = True
+                        response["approval_iterations"] = iteration
+                        consecutive_failures = 0  # Reset failure counter
+                        break
                     
-                    # Mark as successful if we have a plan
-                    response["success"] = True
+                    # If not approved, try to improve the plan
+                    if critic_validation.get("issues_found"):
+                        self.logger.info(f"Iteration {iteration}: Critic found {len(critic_validation['issues_found'])} issues, attempting to improve plan")
+                        improved_plan = self._improve_plan_with_critic(goal, plan_steps, critic_validation)
+                        if improved_plan:
+                            response["plan"] = improved_plan
+                            response["plan_improved"] = True
+                            # Continue to next iteration to re-validate improved plan
+                        else:
+                            self.logger.warning(f"Iteration {iteration}: Failed to improve plan based on critic feedback")
+                            consecutive_failures += 1
+                    else:
+                        consecutive_failures += 1
                 else:
-                    self.logger.warning(f"Planner returned no steps; using fallback. Raw response: {response}")
+                    self.logger.warning(f"Iteration {iteration}: No critic validation available")
+                    consecutive_failures += 1
+                
+                # Check for consecutive failures
+                if consecutive_failures >= 3:
+                    self.logger.error(f"Hit 3 consecutive failures in plan creation")
+                    if self._is_debug_mode():
+                        self.logger.error("Debug mode: Exiting program due to planning failures")
+                        import sys
+                        sys.exit(1)
+                    else:
+                        self.logger.warning("Non-debug mode: Starting fresh planning attempt")
+                        # Reset and start over
+                        iteration = 0
+                        consecutive_failures = 0
+                        continue
+            
+            # Final validation and response preparation
+            if iteration >= max_iterations:
+                self.logger.warning(f"Plan creation completed after {max_iterations} iterations without approval")
+                response["plan_approved"] = False
+                response["approval_iterations"] = iteration
             else:
-                self.logger.warning("Planner returned no response; using fallback.")
+                response["success"] = True
+            
+            # Store planning history
+            self.planning_history.append({
+                "goal": goal,
+                "plan": response.get("plan", []),
+                "critic_validation": response.get("critic_validation"),
+                "approval_iterations": response.get("approval_iterations", iteration),
+                "plan_approved": response.get("plan_approved", False),
+                "timestamp": self._get_timestamp()
+            })
             
             return response
             
@@ -84,7 +340,9 @@ class OverseerAgent(GPTOSS20BAgent):
             
             # Get LLM response with higher token limit for planning
             llm_response = self._call_llm_with_tokens(formatted_prompt, max_new_tokens=1024)
-            
+            # print("- " * 100)
+            # print(f"LLM response on planning: {llm_response}")
+            # print("- " * 100)
             if llm_response is None:
                 return self._create_error_response("LLM call failed", "error")
             

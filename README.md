@@ -108,7 +108,13 @@ python main.py --goal "your goal here" --retries 3
 DISABLE_KILLSWITCH=1 python main.py --goal "your goal here" --debug
 ```
 
-### 3. Control the System
+### 3. Test the Approval Loop
+```bash
+# Test the new approval loop functionality
+python test_approval_loop.py
+```
+
+### 4. Control the System
 ```bash
 # Stop the system
 ./bin/stop
@@ -157,11 +163,13 @@ DA-BOT/
 │   │   └── failsafes.py  # Killswitch, budget limits
 │   ├── overseer/         # Main coordination system
 │   │   ├── overseer.py   # Main overseer class
-│   │   └── overseer_agent.py # Planning agent
+│   │   └── overseer_agent.py # Planning agent with approval loop
 │   ├── perception/       # Vision and analysis
 │   │   └── perception_agent.py # Screenshot analysis
 │   ├── operator/         # Action execution
 │   │   └── operator_agent.py # Mouse, keyboard, navigation
+│   ├── critic/           # Plan validation and improvement
+│   │   └── critic_agent.py # Plan quality assessment
 │   ├── router/           # Tool routing and safety
 │   └── utils/            # Utilities
 │       └── redact.py     # Safe logging utilities
@@ -175,6 +183,7 @@ DA-BOT/
 │   │   └── test_*.py     # Other unit tests
 │   ├── integration/      # Integration tests
 │   └── e2e/              # End-to-end tests
+├── test_approval_loop.py  # Approval loop demonstration
 ├── docs/                  # Documentation
 │   ├── api/              # API documentation
 │   ├── deployment/       # Deployment guides
@@ -214,9 +223,10 @@ The platform is built with a modular architecture:
 - **Base Agents** (`tools/agents/`): Abstract base classes and GPT-OSS-20B integration
 
 ### Specialized Agents (`tools/`)
-- **Overseer** (`tools/overseer/`): Main coordination and planning
+- **Overseer** (`tools/overseer/`): Main coordination and planning with approval loop
 - **Perception** (`tools/perception/`): Screenshot analysis and UI detection
 - **Operator** (`tools/operator/`): Action execution (mouse, keyboard, navigation)
+- **Critic** (`tools/critic/`): Plan validation, quality assessment, and improvement
 - **Router** (`tools/router/`): Tool routing and safety validation
 
 ### Agent Interface (`agents/`)
@@ -245,6 +255,12 @@ The `agents/` package provides a clean interface that imports from the `tools/` 
 - **Project Structure**: Reorganized into logical `tools/` subfolders
 - **Import Paths**: Updated all imports for new structure
 - **Git Ignore**: Added runtime files to prevent accidental commits
+- **Approval Loop**: CriticAgent validates plans with iterative improvement
+- **Capability-Aware Planning**: Plans enforce agent capabilities and preconditions
+- **Dynamic Execution**: Agent-specific dispatch instead of fixed 4-phase loop
+- **Enhanced Prompts**: Detailed capability maps and few-shot examples
+- **Robust JSON Extraction**: Balanced-brace finder for reliable parsing
+- **Memory Field Integration**: Agents can save important information
 
 ### **🎯 Key Features Working**
 - **Intelligent Planning**: GPT-OSS-20B generates structured, actionable plans
@@ -252,6 +268,18 @@ The `agents/` package provides a clean interface that imports from the `tools/` 
 - **Safety First**: Comprehensive failsafe system from day one
 - **Modular Design**: Clean separation of concerns and easy extensibility
 - **Developer Friendly**: Debug mode, dev killswitch override, comprehensive logging
+- **Plan Validation**: CriticAgent ensures plan quality and completeness
+- **Approval Workflow**: Iterative improvement until plan meets standards
+- **Capability Enforcement**: Plans only use valid agent actions
+- **Dynamic Routing**: Steps dispatch to appropriate agents based on plan
+
+### **🧠 Enhanced Agent Capabilities**
+- **Capability Maps**: Each agent knows exactly what actions it can perform
+- **Micro-Step Planning**: Plans broken down into atomic, executable steps
+- **Precondition Insertion**: Automatic insertion of required preparation steps
+- **Few-Shot Examples**: Detailed examples in prompts for better plan generation
+- **Schema Validation**: Strict JSON contracts ensure reliable communication
+- **Memory Integration**: Agents can save important discoveries and patterns
 
 ## Technical Architecture
 
@@ -264,10 +292,12 @@ The `agents/` package provides a clean interface that imports from the `tools/` 
 
 ### **🔄 Execution Flow**
 1. **Goal Setting**: User provides high-level objective
-2. **Planning**: Overseer creates detailed step-by-step plan
-3. **Execution**: Perception → Planning → Operation → Validation loop
-4. **Memory**: Important information persisted across sessions
-5. **Safety**: Continuous monitoring and failsafe activation
+2. **Planning**: Overseer creates detailed step-by-step plan with approval loop
+3. **Plan Validation**: CriticAgent evaluates plan quality and suggests improvements
+4. **Approval Loop**: Iterative improvement until plan meets quality standards
+5. **Dynamic Execution**: Agent-specific dispatch based on plan steps
+6. **Memory**: Important information persisted across sessions
+7. **Safety**: Continuous monitoring and failsafe activation
 
 ### **🧩 Component Interaction**
 ```
@@ -277,6 +307,30 @@ Memory ← Context ← Agents ← Validation ← Safety
     ↓           ↓           ↓              ↓
 Persistence ← Logging ← Monitoring ← Failsafes
 ```
+
+### **🔄 Approval Loop Workflow**
+The system now includes a sophisticated approval loop for plan validation:
+
+```
+1. Plan Creation → 2. Critic Validation → 3. Approval Check
+       ↓                    ↓                    ↓
+   LLM generates        CriticAgent          Score ≥ 0.8?
+   initial plan         evaluates plan           ↓
+       ↓                    ↓                 YES: Approved ✅
+   Canonicalize         Issues found?           ↓
+   & enforce              ↓                   Execute Plan
+   capabilities         YES: Improve
+       ↓                    ↓
+   Continue loop    NO: Continue loop
+```
+
+**Key Features:**
+- **Approval Threshold**: 0.8 (configurable)
+- **Max Iterations**: 3 attempts per planning session
+- **Failure Handling**: 3 consecutive failures trigger retry logic
+- **Debug Mode**: Exits program on failures (vs. restart in production)
+- **Quality Scoring**: CriticAgent provides 0.0-1.0 quality scores
+- **Iterative Improvement**: Plans refined based on critic feedback
 
 ## Development
 

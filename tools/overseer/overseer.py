@@ -68,16 +68,22 @@ class Overseer:
             from tools.overseer import OverseerAgent
             from tools.perception import PerceptionAgent
             from tools.operator import OperatorAgent
+            from tools.critic import CriticAgent
             
             # Create agents with appropriate reasoning levels
             overseer_agent = OverseerAgent(reasoning_level="high")
             perception_agent = PerceptionAgent(reasoning_level="medium")
             operator_agent = OperatorAgent(reasoning_level="medium")
+            critic_agent = CriticAgent(reasoning_level="high")
             
             # Register agents
             self.register_agent(overseer_agent)
             self.register_agent(perception_agent)
             self.register_agent(operator_agent)
+            self.register_agent(critic_agent)
+            
+            # Inject critic agent into overseer for plan validation
+            overseer_agent.critic_agent = critic_agent
             
             self.logger.info(f"Initialized {len(self.agents)} agents: {list(self.agents.keys())}")
             
@@ -246,159 +252,62 @@ class Overseer:
         self.logger.info("Plan execution completed successfully")
         return True
     
-    def _execute_step(self, step_index: int, step_description: Any) -> bool:
-        """Execute a single step."""
+    def _execute_step(self, step_index: int, step: Any) -> bool:
+        """Execute a single step using agent-specific dispatch."""
         try:
-            # Handle both string and object step formats
-            if isinstance(step_description, dict):
-                step_desc = step_description.get("description", f"Step {step_index + 1}")
-                step_agent = step_description.get("next_agent", "perception")
-                step_action = step_description.get("action", "analyze")
+            # Normalize step format
+            if isinstance(step, dict):
+                desc = step.get("description", f"Step {step_index+1}")
+                agent = step.get("next_agent", "perception")
+                action = step.get("action", "analyze")
             else:
-                step_desc = str(step_description)
-                step_agent = "perception"
-                step_action = "analyze"
-            
-            # Phase 1: Perception - analyze current state
-            perception_result = self._execute_perception_step(step_desc)
-            if not perception_result:
+                desc = str(step)
+                agent, action = "perception", "analyze"
+
+            self.logger.info(f"Dispatching step {step_index+1} → agent={agent} action={action}")
+
+            # Include recent history + memory context
+            common = {
+                "goal": self._current_goal_desc(),
+                "step_description": desc,
+                "step_number": len(self.execution_history) + 1,
+                "execution_history": self.execution_history[-10:],
+                "memory_context": self.memory.get_memory_context_for_agent(agent, action, desc),
+            }
+
+            if agent not in self.agents:
+                self.logger.warning(f"No agent registered for {agent}")
                 return False
-            
-            # Phase 2: Planning - decide what action to take
-            action_plan = self._execute_planning_step(step_desc, perception_result)
-            if not action_plan:
-                return False
-            
-            # Phase 3: Operation - execute the action
-            operation_result = self._execute_operation_step(action_plan)
-            if not operation_result:
-                return False
-            
-            # Phase 4: Validation - check if step was successful
-            validation_result = self._execute_validation_step(step_desc, operation_result)
-            
+
+            payload = {"action": action, **common}
+            # Pass through coordinates/text if present
+            if isinstance(step, dict):
+                for k in ("coordinates","text","target","hints"):
+                    if k in step: 
+                        payload[k] = step[k]
+
+            result = self.agents[agent].process(payload)
+            success = bool(result and result.get("success"))
+
             # Record step execution
             self.execution_history.append({
                 "step_index": step_index,
-                "step_description": step_desc,
-                "step_agent": step_agent,
-                "step_action": step_action,
-                "perception_result": perception_result,
-                "action_plan": action_plan,
-                "operation_result": operation_result,
-                "validation_result": validation_result,
+                "step_description": desc,
+                "step_agent": agent,
+                "step_action": action,
+                "operation_result": result,
                 "timestamp": time.time()
             })
             
-            return True
+            return success
             
         except Exception as e:
             self.logger.error(f"Error executing step {step_index}: {e}")
             return False
     
-    def _execute_perception_step(self, step_description: str) -> Optional[Dict[str, Any]]:
-        """Execute perception step to analyze current state."""
-        if "perception" not in self.agents:
-            self.logger.warning("No perception agent available")
-            return {"status": "no_agent", "elements": []}
-        
-        perception_agent = self.agents["perception"]
-        
-        # Create rich perception prompt with full context
-        perception_prompt = {
-            "action": "analyze",
-            "goal": self._current_goal_desc(),
-            "step_description": step_description,
-            "step_number": len(self.execution_history) + 1,
-            "execution_history": self.execution_history[-3:],  # Last 3 steps
-            "memory_context": self.memory.get_memory_context_for_agent("perception", "analyze", step_description),
-            "context": f"Goal: {self._current_goal_desc()}. Step {len(self.execution_history) + 1}: {step_description}. Analyze the current environment and identify what needs to be done."
-        }
-        
-        # Process with perception agent
-        response = perception_agent.process(perception_prompt)
-        return response if response and response.get("success") else {
-            "status": "success",
-            "elements": [],
-            "recommended_action": "continue"
-        }
+
     
-    def _execute_planning_step(self, step_description: str, perception_result: Dict[str, Any]) -> Optional[Dict[str, Any]]:
-        """Execute planning step to decide what action to take."""
-        if "overseer" not in self.agents:
-            self.logger.warning("No overseer agent available")
-            return {"action": "continue", "reasoning": "no agent available"}
-        
-        overseer_agent = self.agents["overseer"]
-        
-        # Create rich planning prompt with full context
-        planning_prompt = {
-            "action": "coordinate",
-            "goal": self._current_goal_desc(),
-            "step_description": step_description,
-            "step_number": len(self.execution_history) + 1,
-            "perception_result": perception_result,
-            "execution_history": self.execution_history[-10:],  # Last 10 steps for better context
-            "memory_context": self.memory.get_memory_context_for_agent("overseer", "plan", step_description),
-            "context": (
-                f"Goal: {self._current_goal_desc()}. Step {len(self.execution_history) + 1}: {step_description}. "
-                "Based on perception result, decide what action to take next. "
-                "Return JSON with an operator-executable \"action\" set to one of "
-                "[\"move_mouse\",\"click\",\"type\",\"scroll\",\"navigate\"]. "
-                "If coordinates or text are required, include them."
-            )
-        }
-        
-        response = overseer_agent.process(planning_prompt)
-        return response if response and response.get("success") else None
-    
-    def _execute_operation_step(self, action_plan: Dict[str, Any]) -> Optional[Dict[str, Any]]:
-        """Execute operation step to perform the planned action."""
-        if "operator" not in self.agents:
-            self.logger.warning("No operator agent available")
-            return {"status": "no_agent", "action": "continue"}
-        
-        operator_agent = self.agents["operator"]
-        
-        # Coerce unsupported actions before calling Operator
-        op_action = action_plan.get("action", "navigate")
-        allowed = {"move_mouse", "click", "type", "scroll", "navigate"}
-        if op_action not in allowed:
-            op_action = action_plan.get("operator_action", "navigate")
-            action_plan["action"] = op_action
-        
-        # Create rich operation prompt with full context
-        operation_prompt = {
-            "action": op_action,
-            "goal": self._current_goal_desc(),
-            "action_plan": action_plan,
-            "step_number": len(self.execution_history) + 1,
-            "execution_history": self.execution_history[-10:],  # Last 10 steps for better context
-            "memory_context": self.memory.get_memory_context_for_agent("operator", "execute", action_plan.get("action", "unknown")),
-            "context": f"Goal: {self._current_goal_desc()}. Execute the planned action: {op_action}."
-        }
-        
-        # Execute the action
-        response = operator_agent.process(operation_prompt)
-        return response if response and response.get("success") else None
-    
-    def _execute_validation_step(self, step_description: str, operation_result: Dict[str, Any]) -> Dict[str, Any]:
-        """Execute validation step to check if the step was successful."""
-        if "critic" not in self.agents:
-            return {"status": "no_agent", "evaluation": "pass"}
-        
-        critic_agent = self.agents["critic"]
-        
-        # Evaluate the step execution
-        validation_prompt = {
-            "action": "evaluate",
-            "step_description": step_description,
-            "operation_result": operation_result,
-            "context": "Evaluate if the step was executed successfully"
-        }
-        
-        response = critic_agent.process(validation_prompt)
-        return response if response and response.get("success") else {"status": "error", "evaluation": "unknown"}
+
     
     def run(self, goal_description: str) -> bool:
         """Main run method - set goal, create plan, and execute."""
